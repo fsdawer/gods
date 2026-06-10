@@ -1,0 +1,95 @@
+erDiagram
+    users {
+        UUID id PK
+        VARCHAR nickname
+        TEXT profile_image_url
+        TEXT bio
+        oauth_provider oauth_provider
+        VARCHAR oauth_id
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    follows {
+        UUID follower_id PK,FK
+        UUID following_id PK,FK
+        TIMESTAMP created_at
+    }
+
+    todos {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR title
+        BOOLEAN is_public
+        DATE date
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    todo_items {
+        UUID id PK
+        UUID todo_id FK
+        VARCHAR content
+        BOOLEAN is_done
+        INTEGER order_idx
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    posts {
+        UUID id PK
+        UUID user_id FK
+        post_type type
+        TEXT content
+        TEXT[] image_urls
+        UUID todo_id FK
+        INTEGER like_count
+        INTEGER comment_count
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    comments {
+        UUID id PK
+        UUID post_id FK
+        UUID user_id FK
+        UUID parent_id FK
+        TEXT content
+        TIMESTAMP created_at
+        TIMESTAMP updated_at
+    }
+
+    likes {
+        UUID user_id PK,FK
+        UUID post_id PK,FK
+        TIMESTAMP created_at
+    }
+
+    tags {
+        UUID id PK
+        VARCHAR name
+        INTEGER post_count
+    }
+
+    post_tags {
+        UUID post_id PK,FK
+        UUID tag_id PK,FK
+    }
+
+    users ||--o{ follows : "follower_id"
+    users ||--o{ follows : "following_id"
+    users ||--o{ todos : "user_id"
+    users ||--o{ posts : "user_id"
+    users ||--o{ comments : "user_id"
+    users ||--o{ likes : "user_id"
+
+    todos ||--o{ todo_items : "todo_id"
+    todos |o--o{ posts : "todo_id"
+
+    posts ||--o{ comments : "post_id"
+    posts ||--o{ likes : "post_id"
+    posts ||--o{ post_tags : "post_id"
+
+    comments }o--o| comments : "parent_id"
+
+    tags ||--o{ post_tags : "tag_id"

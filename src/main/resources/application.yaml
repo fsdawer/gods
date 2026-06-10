@@ -1,0 +1,50 @@
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/joat}
+    username: ${DATABASE_USERNAME:joat}
+    password: ${DATABASE_PASSWORD:joat}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: joat-app
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "joat.common.kafka.event"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-expiry: ${JWT_ACCESS_EXPIRY:1800}
+  refresh-expiry: ${JWT_REFRESH_EXPIRY:1209600}
+
+kakao:
+  user-info-url: https://kapi.kakao.com/v2/user/me
+
+google:
+  user-info-url: https://www.googleapis.com/oauth2/v3/userinfo
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:joat-local-bucket}
+    region: ${AWS_REGION:ap-northeast-2}
+    presigned-expiry: ${S3_PRESIGNED_EXPIRY:300}

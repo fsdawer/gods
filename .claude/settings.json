@@ -1,0 +1,23 @@
+{
+  "enabledPlugins": {
+    "andrej-karpathy-skills@karpathy-skills": true
+  },
+  "extraKnownMarketplaces": {
+    "karpathy-skills": {
+      "source": {
+        "source": "github",
+        "repo": "forrestchang/andrej-karpathy-skills"
+      }
+    }
+  },
+  "permissions": {
+    "deny": [
+      "Bash(psql *)",
+      "Bash(mysql *)",
+      "Bash(sqlite3 *)",
+      "Bash(mongosh *)",
+      "Bash(redis-cli FLUSHALL*)",
+      "Bash(redis-cli FLUSHDB*)"
+    ]
+  }
+}
