@@ -129,7 +129,8 @@ public class TodoController {
             req.getContent(),
             req.getImageUrls(),
             null,   // 인증 포스트는 태그 없이 생성 (이후 수정 가능)
-            todoId
+            todoId,
+            null    // 공개 게시물 (팀방 게시물 아님)
         );
         return ApiResponse.ok(postService.createPost(userId, postReq));
     }

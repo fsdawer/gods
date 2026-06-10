@@ -1,5 +1,6 @@
 package joat.team.service;
 
+import joat.feed.dto.CreatePostRequest;
 import joat.feed.dto.CursorResponse;
 import joat.feed.dto.PostResponse;
 import joat.team.dto.AddMemberRequest;
@@ -127,4 +128,24 @@ public interface TeamService {
      * @return CursorResponse(data, nextCursor, hasNext)
      */
     CursorResponse<PostResponse> getTeamFeed(UUID teamId, UUID userId, UUID cursor, int limit);
+
+    /**
+     * 팀방 게시물 작성. 팀원만 작성할 수 있다.
+     * 작성된 게시물에는 teamId가 설정되어 공개 피드/태그 검색에서 제외된다.
+     *
+     * @param teamId  팀방 ID
+     * @param userId  작성자 userId (팀원 검증 포함)
+     * @param req     게시물 내용, 이미지 URL 목록, 해시태그 목록
+     * @return 생성된 PostResponse
+     */
+    PostResponse createTeamPost(UUID teamId, UUID userId, CreatePostRequest req);
+
+    /**
+     * 유저가 팀방 멤버인지 확인한다.
+     *
+     * @param teamId 팀방 ID
+     * @param userId 확인할 유저 UUID
+     * @return 멤버이면 true, 아니면 false
+     */
+    boolean isMember(UUID teamId, UUID userId);
 }

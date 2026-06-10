@@ -60,16 +60,17 @@ public class PostServiceImpl implements PostService {
     /**
      * [포스트 생성 플로우]*
      * 1. imageUrls를 String[]로 변환 (null이면 빈 배열)
-     * 2. todoId 유무로 분기:
+     * 2. teamId / todoId 유무로 분기:
+     *    - teamId 있음 → Post.teamPost(type=free, teamId 연결) — 공개 피드 제외
      *    - todoId 있음 → Post.todoCert(type=todo_cert, todoId 연결)
-     *    - todoId 없음 → Post.free(type=free)
+     *    - 둘 다 없음 → Post.free(type=free)
      * 3. posts 테이블에 저장
      * 4. tagNames가 있으면 Kafka "post.created" 토픽으로 이벤트 발행
      *    → TagEventConsumer가 비동기로 tags/post_tags 테이블 처리
      *
-     * 입력: userId (작성자), req (content, imageUrls, tagNames, todoId)
+     * 입력: userId (작성자), req (content, imageUrls, tagNames, todoId, teamId)
      * 호출: PostRepository.save → PostEventProducer.publishPostCreated (태그 있을 때)
-     * 반환: PostResponse (id, userId, type, content, imageUrls, todoId, likeCount, commentCount, createdAt)
+     * 반환: PostResponse (id, userId, type, content, imageUrls, todoId, teamId, likeCount, commentCount, createdAt)
      */
     @Override
     @Transactional
@@ -79,10 +80,15 @@ public class PostServiceImpl implements PostService {
             ? req.getImageUrls().toArray(new String[0])
             : new String[0];
 
-        // 투두 인증 포스트 vs 자유 포스트 분기
-        Post post = req.getTodoId() != null
-            ? Post.todoCert(userId, req.getContent(), images, req.getTodoId())
-            : Post.free(userId, req.getContent(), images);
+        // 팀방 게시물 > 투두 인증 포스트 > 자유 포스트 순으로 분기
+        Post post;
+        if (req.getTeamId() != null) {
+            post = Post.teamPost(userId, req.getContent(), images, req.getTeamId());
+        } else if (req.getTodoId() != null) {
+            post = Post.todoCert(userId, req.getContent(), images, req.getTodoId());
+        } else {
+            post = Post.free(userId, req.getContent(), images);
+        }
 
         Post saved = postRepository.save(post);
 

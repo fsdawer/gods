@@ -69,6 +69,23 @@ public class Post extends BaseEntity {
         return post;
     }
 
+    /**
+     * 팀방 전용 게시물 생성 팩토리 메서드.
+     * type은 free이며 teamId가 설정된다.
+     * 팀방 게시물은 공개 탐색/태그 피드에 노출되지 않는다.
+     *
+     * @param userId    작성자 UUID
+     * @param content   게시물 본문
+     * @param imageUrls 첨부 이미지 S3 URL 배열
+     * @param teamId    소속 팀방 UUID
+     * @return teamId가 설정된 Post 엔티티
+     */
+    public static Post teamPost(UUID userId, String content, String[] imageUrls, UUID teamId) {
+        Post post = free(userId, content, imageUrls);
+        post.teamId = teamId;
+        return post;
+    }
+
     public void validateOwner(UUID userId) {
         if (!this.userId.equals(userId)) {
             throw new BusinessException(ErrorCode.POST_ACCESS_DENIED);
