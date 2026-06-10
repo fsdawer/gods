@@ -69,7 +69,7 @@ class PostServiceTest {
     void createPost_todoId_없으면_FREE_타입으로_저장된다() {
         // 자유글: todoId가 null이면 Post.free()로 생성 → type=free
         UUID userId = UUID.randomUUID();
-        CreatePostRequest req = new CreatePostRequest("오늘 갓생 살았다", null, null, null);
+        CreatePostRequest req = new CreatePostRequest("오늘 갓생 살았다", null, null, null, null);
         User author = User.of("갓생러", OAuthProvider.kakao, "kakao-1");
         given(postRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
         given(userRepository.findById(userId)).willReturn(Optional.of(author));
@@ -87,7 +87,7 @@ class PostServiceTest {
         // 투두 인증: todoId가 있으면 Post.todoCert()로 생성 → type=todo_cert, todoId 연결
         UUID userId = UUID.randomUUID();
         UUID todoId = UUID.randomUUID();
-        CreatePostRequest req = new CreatePostRequest("투두 완료!", null, null, todoId);
+        CreatePostRequest req = new CreatePostRequest("투두 완료!", null, null, todoId, null);
         User author = User.of("갓생러", OAuthProvider.kakao, "kakao-1");
         given(postRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
         given(userRepository.findById(userId)).willReturn(Optional.of(author));

@@ -2,6 +2,7 @@ package joat.team.service;
 
 import joat.common.exception.BusinessException;
 import joat.common.exception.ErrorCode;
+import joat.feed.dto.CreatePostRequest;
 import joat.feed.dto.CursorResponse;
 import joat.feed.dto.PostResponse;
 import joat.feed.service.PostService;
@@ -292,6 +293,44 @@ public class TeamServiceImpl implements TeamService {
 
 
 
+
+    /**
+     * 팀방 게시물 작성.
+     * 팀원이 아니면 TEAM_ACCESS_DENIED 예외를 던진다.
+     * 작성된 게시물에는 teamId가 설정되어 공개 피드/태그 검색에서 제외된다.
+     *
+     * @param teamId 팀방 ID
+     * @param userId 작성자 userId (팀원 검증 포함)
+     * @param req    게시물 내용, 이미지 URL 목록, 해시태그 목록
+     * @return 생성된 PostResponse
+     */
+    @Override
+    @Transactional
+    public PostResponse createTeamPost(UUID teamId, UUID userId, CreatePostRequest req) {
+        findRoomOrThrow(teamId);
+        requireMember(teamId, userId);
+        // teamId가 포함된 요청 객체를 PostService에 위임
+        CreatePostRequest teamReq = new CreatePostRequest(
+            req.getContent(),
+            req.getImageUrls(),
+            req.getTagNames(),
+            null,   // 팀방 게시물은 투두 인증 포스트 불가
+            teamId
+        );
+        return postService.createPost(userId, teamReq);
+    }
+
+    /**
+     * 유저가 팀방 멤버인지 확인한다.
+     *
+     * @param teamId 팀방 ID
+     * @param userId 확인할 유저 UUID
+     * @return 멤버이면 true, 아니면 false
+     */
+    @Override
+    public boolean isMember(UUID teamId, UUID userId) {
+        return teamMemberRepository.existsByTeamRoomIdAndUserId(teamId, userId);
+    }
 
     // ---- 내부 헬퍼 ----
 

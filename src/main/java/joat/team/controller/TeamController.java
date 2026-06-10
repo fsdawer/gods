@@ -2,6 +2,7 @@ package joat.team.controller;
 
 import jakarta.validation.Valid;
 import joat.common.response.ApiResponse;
+import joat.feed.dto.CreatePostRequest;
 import joat.feed.dto.CursorResponse;
 import joat.feed.dto.PostResponse;
 import joat.team.dto.AddMemberRequest;
@@ -42,6 +43,7 @@ import java.util.UUID;
  *   <li>DELETE /api/teams/{teamId}/members/{userId} — 팀원 제거</li>
  *   <li>GET    /api/teams/{teamId}/messages        — 채팅 메시지 조회</li>
  *   <li>PATCH  /api/teams/{teamId}/name            — 팀방 이름 변경 (OWNER 전용)</li>
+ *   <li>POST   /api/teams/{teamId}/posts           — 팀방 게시물 작성 (팀원 전용)</li>
  *   <li>DELETE /api/teams/{teamId}/posts/{postId}  — 팀 오너 게시물 강제 삭제</li>
  * </ul>
  */
@@ -171,6 +173,24 @@ public class TeamController {
             @AuthenticationPrincipal UUID userId) {
         teamService.renameTeam(teamId, request.getName(), userId);
         return ApiResponse.ok();
+    }
+
+    /**
+     * 팀방 게시물 작성. 팀원만 가능.
+     * 작성된 게시물에는 teamId가 설정되어 공개 피드/태그 검색에서 제외된다.
+     *
+     * @param teamId  팀방 ID
+     * @param request 게시물 내용, 이미지 URL 목록, 해시태그 목록
+     * @param userId  인증된 요청자 userId
+     * @return 생성된 게시물 응답
+     */
+    @PostMapping("/{teamId}/posts")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ApiResponse<PostResponse> createTeamPost(
+            @PathVariable UUID teamId,
+            @RequestBody @Valid CreatePostRequest request,
+            @AuthenticationPrincipal UUID userId) {
+        return ApiResponse.ok(teamService.createTeamPost(teamId, userId, request));
     }
 
     /**
