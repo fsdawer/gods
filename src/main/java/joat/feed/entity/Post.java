@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -46,6 +47,14 @@ public class Post extends BaseEntity {
     private UUID todoId; // 투두 인증 포스트일 때 연결된 투두 UUID (일반 포스트는 null)
 
     private UUID teamId; // 팀방 전용 게시물일 때 소속 팀방 UUID (공개 게시물은 null)
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TagStatus tagStatus = TagStatus.PENDING; // 태그 처리 상태 (PENDING→DONE 또는 PENDING→FAILED)
+
+    @JdbcTypeCode(SqlTypes.ARRAY)
+    @Column(columnDefinition = "TEXT[]")
+    private String[] pendingTagNames; // DLQ 도달 시 저장되는 미처리 태그명 목록 (배치 재처리용, DONE 시 null)
 
     @Column(nullable = false)
     private int likeCount; // 좋아요 수 (카운터 캐시, likes 테이블 집계 대신 사용)
@@ -95,6 +104,26 @@ public class Post extends BaseEntity {
     public void update(String content, String[] imageUrls) {
         if (content != null) this.content = content;
         if (imageUrls != null) this.imageUrls = imageUrls;
+    }
+
+    /**
+     * 태그 처리 실패 마킹 — DlqConsumer가 호출.
+     * status를 FAILED로 전환하고, 배치 재처리에 사용할 태그명을 저장한다.
+     *
+     * @param tagNames DLQ 이벤트에 담긴 미처리 태그명 목록
+     */
+    public void markTagFailed(List<String> tagNames) {
+        this.tagStatus = TagStatus.FAILED;
+        this.pendingTagNames = tagNames != null ? tagNames.toArray(new String[0]) : new String[0];
+    }
+
+    /**
+     * 태그 처리 완료 마킹 — TagServiceImpl.processTags() 성공 후 호출.
+     * status를 DONE으로 전환하고 pendingTagNames를 초기화한다.
+     */
+    public void markTagDone() {
+        this.tagStatus = TagStatus.DONE;
+        this.pendingTagNames = null;
     }
 
     public void incrementLike() { this.likeCount++; }

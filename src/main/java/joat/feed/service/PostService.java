@@ -138,4 +138,22 @@ public interface PostService {
      * @param postId 삭제할 포스트 UUID
      */
     void forceDeletePost(UUID postId);
+
+    /**
+     * 태그 처리 실패 마킹 — TagDlqConsumer가 DLQ 이벤트 수신 시 호출.
+     * tag_status를 FAILED로 전환하고 pending_tag_names를 저장한다.
+     * TagRetryBatch가 이 데이터를 읽어 재처리를 시도한다.
+     *
+     * @param postId   대상 포스트 UUID
+     * @param tagNames 재처리에 필요한 태그명 목록
+     */
+    void markTagFailed(UUID postId, List<String> tagNames);
+
+    /**
+     * 태그 처리 완료 마킹 — TagServiceImpl.processTags() 성공 후 호출.
+     * tag_status를 DONE으로 전환하고 pending_tag_names를 초기화한다.
+     *
+     * @param postId 대상 포스트 UUID
+     */
+    void markTagDone(UUID postId);
 }

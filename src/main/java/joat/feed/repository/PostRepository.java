@@ -1,6 +1,7 @@
 package joat.feed.repository;
 
 import joat.feed.entity.Post;
+import joat.feed.entity.TagStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -41,4 +42,7 @@ public interface PostRepository extends JpaRepository<Post, UUID> {
     // 팀 피드 — 유저 목록 기반, 커서 이후 조회
     @Query("SELECT p FROM Post p WHERE p.userId IN :userIds AND p.createdAt < (SELECT c.createdAt FROM Post c WHERE c.id = :cursor) ORDER BY p.createdAt DESC")
     Slice<Post> findFeedAfterCursor(@Param("userIds") List<UUID> userIds, @Param("cursor") UUID cursor, Pageable pageable);
+
+    // 태그 처리 실패 포스트 조회 (배치 재처리용)
+    List<Post> findByTagStatus(TagStatus tagStatus);
 }

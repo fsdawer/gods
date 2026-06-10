@@ -1,6 +1,8 @@
 package joat.tag.service;
 
+import joat.feed.service.PostService;
 import joat.tag.entity.PostTag;
+import joat.tag.entity.PostTagId;
 import joat.tag.entity.Tag;
 import joat.tag.dto.TagResponse;
 import joat.tag.repository.PostTagRepository;
@@ -32,42 +34,45 @@ public class TagServiceImpl implements TagService {
     private final TagRepository tagRepository;
     private final PostTagRepository postTagRepository;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final PostService postService;
 
     /**
-     * [태그 처리 플로우 — Kafka Consumer에서 호출]
+     * [태그 처리 플로우 — Kafka Consumer 또는 배치 재처리에서 호출]
      * TagEventConsumer.onPostCreated → 이 메서드 호출 (비동기, 트랜잭션 내)
+     * TagRetryBatch → 이 메서드 호출 (FAILED 포스트 재처리)
      *
      * 태그명 목록을 순회하며:
      * 1. 소문자 정규화 (normalized = name.toLowerCase())
      * 2. tags 테이블에서 name으로 조회 — 없으면 신규 Tag 생성/저장
-     * 3. post_tags 테이블에 (postId, tagId) 삽입 (포스트-태그 연결)
-     * 4. Tag.postCount + 1 (JPA dirty checking)
-     * 5. Redis "tags:trending" Sorted Set에 해당 태그의 score += 1
+     * 3. (postId, tagId) 조합이 이미 존재하면 건너뜀 (멱등성 — 재시도/배치 중복 방지)
+     * 4. post_tags 테이블에 (postId, tagId) 삽입
+     * 5. Tag.postCount + 1 (JPA dirty checking)
+     * 6. Redis "tags:trending" Sorted Set에 해당 태그의 score += 1
+     * 7. 모든 태그 처리 완료 후 PostService.markTagDone(postId) 호출
      *
      * 입력: postId (연결할 포스트 UUID), tagNames (태그명 목록)
-     * 호출: TagRepository.findByName → TagRepository.save → PostTagRepository.save
-     *       → Tag.incrementPostCount → RedisTemplate.opsForZSet().incrementScore
+     * 호출: TagRepository.findByName → TagRepository.save → PostTagRepository.existsById
+     *       → PostTagRepository.save → Tag.incrementPostCount
+     *       → RedisTemplate.opsForZSet().incrementScore → PostService.markTagDone
      * 반환: void
      */
     @Override
     @Transactional
     public void processTags(UUID postId, List<String> tagNames) {
         for (String name : tagNames) {
-            String normalized = name.toLowerCase(); // 소문자 정규화
+            String normalized = name.toLowerCase();
 
-            // DB에서 태그 조회 또는 신규 생성
             Tag tag = tagRepository.findByName(normalized)
                 .orElseGet(() -> tagRepository.save(Tag.of(normalized)));
 
-            // 포스트-태그 다대다 연결
+            // 멱등성: 이미 연결된 태그는 건너뜀 (재시도 또는 배치 재처리 시 중복 방지)
+            if (postTagRepository.existsById(new PostTagId(postId, tag.getId()))) continue;
+
             postTagRepository.save(PostTag.of(postId, tag.getId()));
-
-            // DB 카운터 증가 (dirty checking)
             tag.incrementPostCount();
-
-            // Redis Sorted Set score 증가 → 트렌딩 실시간 반영
             redisTemplate.opsForZSet().incrementScore(TRENDING_KEY, normalized, 1);
         }
+        postService.markTagDone(postId);
     }
 
     /**
@@ -102,20 +107,17 @@ public class TagServiceImpl implements TagService {
      */
     @Override
     public List<TagResponse> getTrending() {
-        // Redis Sorted Set에서 상위 20개 조회 (score 높은 순)
         Set<Object> cached = redisTemplate.opsForZSet().reverseRange(TRENDING_KEY, 0, 19);
 
         if (cached != null && !cached.isEmpty()) {
-            // Redis 캐시 HIT → 태그명으로 DB 조회하여 TagResponse 반환
             return cached.stream()
                 .map(name -> tagRepository.findByName(name.toString())
                     .map(TagResponse::from)
                     .orElse(null))
-                .filter(Objects::nonNull) // DB에 없는 캐시 항목 제거
+                .filter(Objects::nonNull)
                 .toList();
         }
 
-        // Redis 캐시 MISS → DB에서 직접 조회
         return tagRepository.findTop20ByOrderByPostCountDesc()
             .stream()
             .map(TagResponse::from)
