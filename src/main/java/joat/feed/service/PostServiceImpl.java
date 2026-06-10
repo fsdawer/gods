@@ -367,6 +367,36 @@ public class PostServiceImpl implements PostService {
     }
 
     /**
+     * [태그 처리 실패 마킹]
+     * DLQ 이벤트 수신 시 TagDlqConsumer가 호출.
+     * post가 존재하지 않는 경우(이미 삭제된 경우)는 무시한다.
+     *
+     * 입력: postId, tagNames (재처리용 태그명 목록)
+     * 호출: PostRepository.findById → Post.markTagFailed
+     * 반환: void
+     */
+    @Override
+    @Transactional
+    public void markTagFailed(UUID postId, List<String> tagNames) {
+        postRepository.findById(postId).ifPresent(post -> post.markTagFailed(tagNames));
+    }
+
+    /**
+     * [태그 처리 완료 마킹]
+     * TagServiceImpl.processTags() 성공 후 호출.
+     * post가 존재하지 않는 경우는 무시한다.
+     *
+     * 입력: postId
+     * 호출: PostRepository.findById → Post.markTagDone
+     * 반환: void
+     */
+    @Override
+    @Transactional
+    public void markTagDone(UUID postId) {
+        postRepository.findById(postId).ifPresent(Post::markTagDone);
+    }
+
+    /**
      * [포스트 조회 공통 메서드]
      * posts 테이블에서 id로 조회 (없으면 POST_NOT_FOUND).
      *

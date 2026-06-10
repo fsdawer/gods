@@ -10,4 +10,7 @@ public final class KafkaTopics {
 
     /** 포스트 생성 이벤트 토픽 — TagEventConsumer가 수신하여 태그를 처리한다 */
     public static final String POST_CREATED = "post.created";
+
+    /** post.created DLQ 토픽 — 3회 재시도 후 실패한 이벤트가 여기 도달, TagDlqConsumer가 FAILED 마킹 */
+    public static final String POST_CREATED_DLQ = "post.created.dlq";
 }
