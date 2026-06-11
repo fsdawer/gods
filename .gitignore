@@ -44,3 +44,4 @@ out/
 
 ### Firebase secrets ###
 secrets/
+*firebase-adminsdk*.json
