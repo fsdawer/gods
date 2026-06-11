@@ -41,3 +41,6 @@ out/
 
 ### Git worktrees ###
 .worktrees/
+
+### Firebase secrets ###
+secrets/

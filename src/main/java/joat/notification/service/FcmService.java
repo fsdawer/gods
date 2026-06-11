@@ -1,4 +1,4 @@
-package joat.notification;
+package joat.notification.service;
 
 /**
  * FCM 푸시 알림 발송 서비스 인터페이스.

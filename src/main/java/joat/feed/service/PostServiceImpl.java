@@ -5,7 +5,7 @@ import joat.common.exception.ErrorCode;
 import joat.common.kafka.PostEventProducer;
 import joat.common.kafka.event.NotificationEvent;
 import joat.common.kafka.event.PostCreatedEvent;
-import joat.notification.NotificationEventProducer;
+import joat.notification.kafka.NotificationEventProducer;
 import joat.notification.NotificationType;
 import joat.feed.entity.Like;
 import joat.feed.entity.LikeId;

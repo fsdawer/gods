@@ -4,7 +4,7 @@ import joat.common.exception.BusinessException;
 import joat.common.exception.ErrorCode;
 import joat.common.kafka.event.NotificationEvent;
 import joat.feed.service.PostService;
-import joat.notification.NotificationEventProducer;
+import joat.notification.kafka.NotificationEventProducer;
 import joat.notification.NotificationType;
 import joat.user.dto.FollowListResponse;
 import joat.user.dto.UpdateProfileRequest;
