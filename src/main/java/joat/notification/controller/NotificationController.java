@@ -1,11 +1,10 @@
-package joat.notification;
+package joat.notification.controller;
 
 import joat.common.response.ApiResponse;
 import joat.notification.dto.NotificationResponse;
-import joat.notification.repository.NotificationRepository;
+import joat.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class NotificationController {
 
-    private final NotificationRepository notificationRepository;
+    private final NotificationService notificationService;
 
     /**
      * [엔드포인트] GET /api/notifications — 내 알림 목록 조회 (최신 30개)
@@ -30,12 +29,7 @@ public class NotificationController {
      */
     @GetMapping
     public ApiResponse<List<NotificationResponse>> list(@AuthenticationPrincipal UUID userId) {
-        List<NotificationResponse> result = notificationRepository
-            .findTop30ByReceiverIdOrderByCreatedAtDesc(userId)
-            .stream()
-            .map(NotificationResponse::from)
-            .toList();
-        return ApiResponse.ok(result);
+        return ApiResponse.ok(notificationService.getMyNotifications(userId));
     }
 
     /**
@@ -44,7 +38,7 @@ public class NotificationController {
      */
     @GetMapping("/unread-count")
     public ApiResponse<Long> unreadCount(@AuthenticationPrincipal UUID userId) {
-        return ApiResponse.ok(notificationRepository.countByReceiverIdAndIsReadFalse(userId));
+        return ApiResponse.ok(notificationService.getUnreadCount(userId));
     }
 
     /**
@@ -52,9 +46,8 @@ public class NotificationController {
      * 알림 화면 진입 시 호출하여 배지를 초기화한다.
      */
     @PostMapping("/read-all")
-    @Transactional
     public ApiResponse<Void> readAll(@AuthenticationPrincipal UUID userId) {
-        notificationRepository.markAllReadByReceiverId(userId);
+        notificationService.markAllRead(userId);
         return ApiResponse.ok();
     }
 }

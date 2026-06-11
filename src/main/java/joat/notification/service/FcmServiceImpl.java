@@ -1,4 +1,4 @@
-package joat.notification;
+package joat.notification.service;
 
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;

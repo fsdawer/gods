@@ -5,7 +5,7 @@ import joat.common.exception.ErrorCode;
 import joat.common.kafka.event.NotificationEvent;
 import joat.feed.entity.Comment;
 import joat.feed.entity.Post;
-import joat.notification.NotificationEventProducer;
+import joat.notification.kafka.NotificationEventProducer;
 import joat.notification.NotificationType;
 import joat.feed.dto.CommentResponse;
 import joat.feed.dto.CreateCommentRequest;

@@ -1,9 +1,11 @@
-package joat.notification;
+package joat.notification.kafka;
 
 import joat.common.kafka.KafkaTopics;
 import joat.common.kafka.event.NotificationEvent;
+import joat.notification.NotificationType;
 import joat.notification.entity.NotificationRecord;
 import joat.notification.repository.NotificationRepository;
+import joat.notification.service.FcmService;
 import joat.user.entity.User;
 import joat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;

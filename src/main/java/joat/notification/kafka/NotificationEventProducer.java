@@ -1,4 +1,4 @@
-package joat.notification;
+package joat.notification.kafka;
 
 import joat.common.kafka.KafkaTopics;
 import joat.common.kafka.event.NotificationEvent;
