@@ -3,7 +3,10 @@ package joat.feed.service;
 import joat.common.exception.BusinessException;
 import joat.common.exception.ErrorCode;
 import joat.common.kafka.PostEventProducer;
+import joat.common.kafka.event.NotificationEvent;
 import joat.common.kafka.event.PostCreatedEvent;
+import joat.notification.NotificationEventProducer;
+import joat.notification.NotificationType;
 import joat.feed.entity.Like;
 import joat.feed.entity.LikeId;
 import joat.feed.entity.Post;
@@ -60,6 +63,7 @@ public class PostServiceImpl implements PostService {
     private final TagRepository tagRepository;
     private final TodoService todoService;
     private final Optional<PostEventProducer> postEventProducer;
+    private final Optional<NotificationEventProducer> notificationProducer;
     private final PostSaveHelper postSaveHelper;
     private final TagService tagService;
 
@@ -228,6 +232,10 @@ public class PostServiceImpl implements PostService {
         }
         likeRepository.save(Like.of(userId, postId));
         post.incrementLike(); // likeCount 카운터 캐시 증가
+        // 좋아요 알림 — 게시물 작성자가 수신자
+        notificationProducer.ifPresent(p -> p.publish(
+            new NotificationEvent(NotificationType.LIKE, userId, post.getUserId(), postId)
+        ));
     }
 
     /**

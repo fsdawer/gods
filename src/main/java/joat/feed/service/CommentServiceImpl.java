@@ -2,8 +2,11 @@ package joat.feed.service;
 
 import joat.common.exception.BusinessException;
 import joat.common.exception.ErrorCode;
+import joat.common.kafka.event.NotificationEvent;
 import joat.feed.entity.Comment;
 import joat.feed.entity.Post;
+import joat.notification.NotificationEventProducer;
+import joat.notification.NotificationType;
 import joat.feed.dto.CommentResponse;
 import joat.feed.dto.CreateCommentRequest;
 import joat.feed.dto.CursorResponse;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -34,6 +38,7 @@ public class CommentServiceImpl implements CommentService {
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
     private final UserRepository userRepository;
+    private final Optional<NotificationEventProducer> notificationProducer;
 
     /**
      * [댓글 목록 조회 플로우 — 커서 기반 페이지네이션]
@@ -91,6 +96,11 @@ public class CommentServiceImpl implements CommentService {
 
         // 게시물 댓글 수 카운터 증가
         post.incrementComment();
+
+        // 댓글 알림 — 게시물 작성자가 수신자
+        notificationProducer.ifPresent(p -> p.publish(
+            new NotificationEvent(NotificationType.COMMENT, userId, post.getUserId(), postId)
+        ));
 
         User author = userRepository.findById(userId).orElse(null);
         return CommentResponse.from(comment, author);

@@ -2,7 +2,10 @@ package joat.user.service;
 
 import joat.common.exception.BusinessException;
 import joat.common.exception.ErrorCode;
+import joat.common.kafka.event.NotificationEvent;
 import joat.feed.service.PostService;
+import joat.notification.NotificationEventProducer;
+import joat.notification.NotificationType;
 import joat.user.dto.FollowListResponse;
 import joat.user.dto.UpdateProfileRequest;
 import joat.user.dto.UserProfileResponse;
@@ -17,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,13 +36,16 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final FollowRepository followRepository;
     private final PostService postService;
+    private final Optional<NotificationEventProducer> notificationProducer;
 
     public UserServiceImpl(UserRepository userRepository,
                            FollowRepository followRepository,
-                           @Lazy PostService postService) {
+                           @Lazy PostService postService,
+                           Optional<NotificationEventProducer> notificationProducer) {
         this.userRepository = userRepository;
         this.followRepository = followRepository;
         this.postService = postService;
+        this.notificationProducer = notificationProducer;
     }
 
     /**
@@ -124,6 +131,10 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ErrorCode.ALREADY_FOLLOWING);
         }
         followRepository.save(Follow.of(followerId, followingId));
+        // 팔로우 알림 — Kafka 비활성 환경에서는 producer가 없으므로 Optional로 처리
+        notificationProducer.ifPresent(p -> p.publish(
+            new NotificationEvent(NotificationType.FOLLOW, followerId, followingId, null)
+        ));
     }
 
     /**
@@ -240,6 +251,21 @@ public class UserServiceImpl implements UserService {
         return users.stream()
             .map(u -> UserSummary.from(u, viewerId != null ? viewerFollowingIds.contains(u.getId()) : null))
             .toList();
+    }
+
+    /**
+     * [FCM 토큰 저장 플로우]
+     * 앱 시작 시 RN에서 호출하여 최신 토큰을 등록한다.
+     * null 전달 시 토큰을 제거하여 로그아웃 후 알림 수신을 중단한다.
+     *
+     * 입력: userId (JWT에서 파싱), fcmToken (새 토큰 또는 null)
+     * 호출: UserRepository.findById → User.updateFcmToken (JPA dirty checking)
+     * 반환: void
+     */
+    @Override
+    @Transactional
+    public void saveFcmToken(UUID userId, String fcmToken) {
+        findUser(userId).updateFcmToken(fcmToken);
     }
 
     /**

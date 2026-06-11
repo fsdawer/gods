@@ -87,4 +87,13 @@ public interface UserService {
      * @return UserSummary 목록
      */
     List<UserSummary> searchByNickname(String q, UUID viewerId);
+
+    /**
+     * FCM 디바이스 토큰을 저장하거나 초기화한다.
+     * 앱 시작 시 토큰을 등록하고, 로그아웃 시 null을 전달하여 알림 수신을 중단한다.
+     *
+     * @param userId   요청자 UUID (JWT에서 파싱)
+     * @param fcmToken 저장할 FCM 토큰, 또는 null (토큰 제거)
+     */
+    void saveFcmToken(UUID userId, String fcmToken);
 }
