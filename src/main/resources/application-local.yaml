@@ -11,6 +11,10 @@ spring:
     show-sql: true
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 50  # saveAll() 호출 시 INSERT를 최대 50개 단위로 묶어 배치 실행
   flyway:
     enabled: true
     baseline-on-migrate: true

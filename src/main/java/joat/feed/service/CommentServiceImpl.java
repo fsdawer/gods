@@ -6,11 +6,14 @@ import joat.feed.entity.Comment;
 import joat.feed.entity.Post;
 import joat.feed.dto.CommentResponse;
 import joat.feed.dto.CreateCommentRequest;
+import joat.feed.dto.CursorResponse;
 import joat.feed.repository.CommentRepository;
 import joat.feed.repository.PostRepository;
 import joat.user.entity.User;
 import joat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,25 +36,41 @@ public class CommentServiceImpl implements CommentService {
     private final UserRepository userRepository;
 
     /**
-     * [댓글 목록 조회 플로우]
-     * 1. 게시물 ID로 댓글 전체 조회 (생성 시각 오름차순)
-     * 2. 댓글이 없으면 빈 리스트 즉시 반환
+     * [댓글 목록 조회 플로우 — 커서 기반 페이지네이션]
+     * 1. cursor 없으면 첫 페이지, cursor 있으면 해당 UUID 이후 페이지 조회 (시간 오름차순)
+     * 2. limit+1개를 조회하여 hasNext 판단 (limit+1번째가 있으면 다음 페이지 존재)
      * 3. 작성자 UUID 목록으로 유저 배치 조회 (N+1 방지)
-     * 4. userMap을 통해 각 댓글에 author 정보를 연결하여 반환
+     * 4. 마지막 항목의 UUID를 nextCursor로 반환
+     *
+     * @param postId 대상 포스트 UUID
+     * @param cursor 이전 페이지 마지막 댓글 UUID (없으면 첫 페이지)
+     * @param limit  페이지당 댓글 수
+     * @return CursorResponse (data, nextCursor, hasNext)
      */
     @Override
-    public List<CommentResponse> getComments(UUID postId) {
-        List<Comment> comments = commentRepository.findByPostIdOrderByCreatedAtAsc(postId);
-        if (comments.isEmpty()) return List.of();
+    public CursorResponse<CommentResponse> getComments(UUID postId, UUID cursor, int limit) {
+        Slice<Comment> slice = cursor == null
+            ? commentRepository.findByPostIdOrderByCreatedAtAsc(postId, PageRequest.of(0, limit + 1))
+            : commentRepository.findByPostIdAfterCursor(postId, cursor, PageRequest.of(0, limit + 1));
+
+        List<Comment> all = slice.getContent();
+        boolean hasNext = all.size() > limit;
+        // limit+1 번째 항목은 hasNext 판단에만 사용하고 응답에서 제외
+        List<Comment> data = hasNext ? all.subList(0, limit) : all;
+
+        if (data.isEmpty()) return new CursorResponse<>(List.of(), null, false);
 
         // author 배치 로딩 (N+1 방지)
-        List<UUID> userIds = comments.stream().map(Comment::getUserId).distinct().toList();
+        List<UUID> userIds = data.stream().map(Comment::getUserId).distinct().toList();
         Map<UUID, User> userMap = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 
-        return comments.stream()
-                .map(c -> CommentResponse.from(c, userMap.get(c.getUserId())))
-                .toList();
+        UUID nextCursor = hasNext ? data.get(data.size() - 1).getId() : null;
+        return new CursorResponse<>(
+            data.stream().map(c -> CommentResponse.from(c, userMap.get(c.getUserId()))).toList(),
+            nextCursor,
+            hasNext
+        );
     }
 
     /**

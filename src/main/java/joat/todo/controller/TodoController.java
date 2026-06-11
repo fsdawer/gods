@@ -121,7 +121,7 @@ public class TodoController {
     public ApiResponse<PostResponse> certify(
         @AuthenticationPrincipal UUID userId,
         @PathVariable UUID todoId,
-        @RequestBody CertifyRequest req
+        @Valid @RequestBody CertifyRequest req
     ) {
         // 본인 투두인지 검증 (TODO_ACCESS_DENIED)
         todoService.findTodo(todoId).validateOwner(userId);

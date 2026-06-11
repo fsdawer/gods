@@ -13,9 +13,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * TagService 구현체.
@@ -93,7 +96,8 @@ public class TagServiceImpl implements TagService {
      * 1. Redis "tags:trending" ZSet에서 상위 20개 태그명 조회 (score 내림차순)
      * 2. Redis 캐시가 비어있으면 (초기 상태 or TTL 만료) DB fallback:
      *    → tags 테이블에서 post_count DESC 상위 20개 조회
-     * 3. 태그명으로 DB에서 Tag 엔티티 조회 (Redis에 있지만 DB에 없는 경우 null 필터)
+     * 3. 태그명 목록으로 DB 배치 조회 (WHERE name IN) → Redis 순서 유지하며 매핑
+     *    (Redis에 있지만 DB에 없는 경우 null 필터)
      *
      * @return TagResponse 목록 (최대 20개, score/postCount 내림차순)
      */
@@ -102,11 +106,14 @@ public class TagServiceImpl implements TagService {
         Set<Object> cached = redisTemplate.opsForZSet().reverseRange(TRENDING_KEY, 0, 19);
 
         if (cached != null && !cached.isEmpty()) {
-            return cached.stream()
-                .map(name -> tagRepository.findByName(name.toString())
-                    .map(TagResponse::from)
-                    .orElse(null))
+            List<String> names = cached.stream().map(Object::toString).toList();
+            // WHERE name IN (...) 한 번 실행 — 태그 20개마다 개별 조회하던 N+1 제거
+            Map<String, Tag> tagMap = tagRepository.findAllByNameIn(names).stream()
+                .collect(Collectors.toMap(Tag::getName, Function.identity()));
+            return names.stream()
+                .map(tagMap::get)
                 .filter(Objects::nonNull)
+                .map(TagResponse::from)
                 .toList();
         }
 
