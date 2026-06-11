@@ -21,7 +21,44 @@
 | 3 | **핀포인트 수정** — 오류 수정 시 그 부분만. 연쇄 수정으로 오류 숨기기 금지. |
 | 4 | **명시 임포트** — FQCN(`java.util.Map`, `java.util.Optional` 등) 필드·파라미터·변수 선언에 사용 금지. 반드시 파일 상단에 `import java.util.Optional;` 형태로 추가 후 단순명으로 사용. |
 | 5 | **백엔드+프론트 동시** — API 만들면 RN 화면도 함께. 순서: 서비스 → 엔드포인트 → RN 화면 → 연동. |
-| 6 | **주석 동기화** — 메서드·필드를 수정하면 해당 Javadoc/인라인 주석도 반드시 함께 수정. 시그니처(파라미터·반환값)가 바뀌면 `@param`·`@return`·플로우 설명도 갱신. 새 메서드 추가 시 주석 작성 필수. |
+| 6 | **주석 동기화** — 메서드·필드를 수정하면 해당 Javadoc/인라인 주석도 반드시 함께 수정. 시그니처(파라미터·반환값)가 바뀌면 `@param`·`@return`·플로우 설명도 갱신. 새 메서드 추가 시 주석 작성 필수. 인라인 주석 스타일은 아래 §주석 스타일 참고. |
+| 7 | **작업 완료 보고** — 구현 완료 후 응답에 반드시 생성/수정된 메서드 목록을 명시. 형식: `패키지.파일명 > 메서드명(파라미터): 설명` |
+| 8 | **머지까지 완료** — 구현·테스트·커밋 후 반드시 `git merge feat/<name> --no-ff` 로 main에 머지. 워크트리는 머지 후 `git worktree remove` 로 정리. |
+
+---
+
+## 주석 스타일
+
+인라인 주석은 **"왜"와 "무엇을 위해"** 를 설명한다. 코드 자체가 이미 말하는 것("map으로 변환", "toList 호출")은 쓰지 않는다.
+
+**패턴**
+- 변수·스트림 단계 옆에 `// 한 줄로 목적 + 다음 단계와의 연결`
+- 조건부 로직(`viewerId != null ? ...`)은 분기 이유와 null 케이스 의미를 설명
+- 성능 선택(N+1 회피, 배치 조회 등)은 반드시 명시
+
+```java
+// follows 테이블에서 following_id = userId인 row 조회 → "나를 팔로우하는 사람들"의 Follow 객체 목록
+List<UUID> followerIds = followRepository.findByFollowingId(userId)
+    .stream()
+    .map(Follow::getFollowerId) // Follow 객체에서 팔로워의 UUID만 추출
+    .toList();                  // UUID 리스트로 변환 (다음 배치 조회에 사용)
+
+// followerIds로 WHERE id IN (...) 한 번 실행 → N+1 없이 User 전체 정보 한 번에 로딩
+List<User> users = userRepository.findAllById(followerIds);
+// viewer(현재 앱 사용자)가 팔로우하는 ID Set → 각 팔로워 카드의 "팔로우 중" 버튼 상태 계산에 사용
+Set<UUID> viewerFollowingIds = loadViewerFollowingIds(viewerId);
+
+List<UserSummary> summaries = users.stream()
+    .map(u -> UserSummary.from(
+        u,
+        // viewerId가 null(비로그인)이면 팔로우 여부를 알 수 없으므로 null 전달
+        // viewerId가 있으면 viewerFollowingIds에 이 유저가 포함되는지로 맞팔 여부 판단
+        viewerId != null ? viewerFollowingIds.contains(u.getId()) : null
+    ))
+    .toList();
+
+return new FollowListResponse(summaries); // 팔로워 목록 + 각자의 맞팔 여부를 담아 반환
+```
 
 ---
 

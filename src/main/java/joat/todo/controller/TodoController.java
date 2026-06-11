@@ -12,6 +12,7 @@ import joat.todo.dto.UpdateTodoItemRequest;
 import joat.todo.dto.UpdateTodoRequest;
 import joat.todo.service.TodoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +33,7 @@ import java.util.UUID;
  * 투두리스트 관련 API 컨트롤러.
  * 투두 CRUD, 항목 체크, 타인 공개 투두 조회, 투두 인증 포스트 작성을 제공한다.
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/todos")
 @RequiredArgsConstructor
@@ -116,6 +118,7 @@ public class TodoController {
     /**
      * [엔드포인트] POST /api/todos/{todoId}/certify — 투두 인증 포스트 작성
      * 소유자 검증 후 CreatePostRequest(type=todo_cert)로 변환하여 PostService.createPost를 호출한다.
+     * content, imageUrls, tagNames를 그대로 전달한다.
      */
     @PostMapping("/{todoId}/certify")
     public ApiResponse<PostResponse> certify(
@@ -123,12 +126,13 @@ public class TodoController {
         @PathVariable UUID todoId,
         @Valid @RequestBody CertifyRequest req
     ) {
+        log.info("[certify] todoId={}, imageUrls={}, tagNames={}", todoId, req.getImageUrls(), req.getTagNames());
         // 본인 투두인지 검증 (TODO_ACCESS_DENIED)
         todoService.findTodo(todoId).validateOwner(userId);
         CreatePostRequest postReq = new CreatePostRequest(
             req.getContent(),
             req.getImageUrls(),
-            null,   // 인증 포스트는 태그 없이 생성 (이후 수정 가능)
+            req.getTagNames(),
             todoId,
             null    // 공개 게시물 (팀방 게시물 아님)
         );

@@ -13,6 +13,7 @@ import joat.feed.dto.UpdatePostRequest;
 import joat.feed.service.CommentService;
 import joat.feed.service.PostService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -32,6 +33,7 @@ import java.util.UUID;
  * 피드 조회, 포스트 CRUD, 좋아요, 댓글 CRUD를 하나의 컨트롤러에서 관리한다.
  */
 @Validated
+@Slf4j
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
@@ -49,6 +51,7 @@ public class PostController {
         @AuthenticationPrincipal UUID userId,
         @Valid @RequestBody CreatePostRequest req
     ) {
+        log.info("[createPost] imageUrls={}", req.getImageUrls());
         return ApiResponse.ok(postService.createPost(userId, req));
     }
 

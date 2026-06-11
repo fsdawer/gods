@@ -20,6 +20,9 @@ spring:
     baseline-on-migrate: true
     baseline-version: 5
     locations: classpath:db/migration,classpath:db/seed
+  data:
+    redis:
+      port: 6380
   kafka:
     enabled: true
 

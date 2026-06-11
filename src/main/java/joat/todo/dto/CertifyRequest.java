@@ -21,4 +21,6 @@ public class CertifyRequest {
     private String content;
     /** 첨부할 이미지 S3 URL 목록 (없으면 null) */
     private List<String> imageUrls;
+    /** 해시태그 이름 목록 (없으면 null) */
+    private List<String> tagNames;
 }
