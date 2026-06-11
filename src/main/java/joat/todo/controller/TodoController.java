@@ -8,6 +8,7 @@ import joat.feed.service.PostService;
 import joat.todo.dto.CertifyRequest;
 import joat.todo.dto.CreateTodoRequest;
 import joat.todo.dto.TodoResponse;
+import joat.todo.dto.TodoStatsResponse;
 import joat.todo.dto.UpdateTodoItemRequest;
 import joat.todo.dto.UpdateTodoRequest;
 import joat.todo.service.TodoService;
@@ -104,6 +105,15 @@ public class TodoController {
         @RequestBody UpdateTodoItemRequest req
     ) {
         return ApiResponse.ok(todoService.checkItem(todoId, itemId, userId, req.isCompleted()));
+    }
+
+    /**
+     * [엔드포인트] GET /api/todos/stats — 투두 완료율·스트릭 통계 조회
+     * 유저의 전체 투두를 기반으로 완료율, 현재 연속 달성일, 역대 최장 연속 달성일을 반환한다.
+     */
+    @GetMapping("/stats")
+    public ApiResponse<TodoStatsResponse> stats(@AuthenticationPrincipal UUID userId) {
+        return ApiResponse.ok(todoService.getStats(userId));
     }
 
     /**

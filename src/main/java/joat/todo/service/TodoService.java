@@ -3,6 +3,7 @@ package joat.todo.service;
 import joat.todo.entity.Todo;
 import joat.todo.dto.CreateTodoRequest;
 import joat.todo.dto.TodoResponse;
+import joat.todo.dto.TodoStatsResponse;
 import joat.todo.dto.UpdateTodoRequest;
 
 import java.time.LocalDate;
@@ -77,4 +78,13 @@ public interface TodoService {
      * @return Todo 엔티티
      */
     Todo findTodo(UUID todoId);
+
+    /**
+     * 투두 완료율 및 연속 달성일(스트릭) 통계 조회.
+     * 유저의 전체 투두를 기반으로 완료율, 현재 스트릭, 역대 최장 스트릭을 계산한다.
+     *
+     * @param userId 조회 대상 유저 UUID
+     * @return TodoStatsResponse (totalTodos, completedTodos, completionRate, currentStreak, longestStreak)
+     */
+    TodoStatsResponse getStats(UUID userId);
 }
