@@ -1,6 +1,8 @@
 package joat.feed.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import joat.common.response.ApiResponse;
 import joat.feed.dto.CommentResponse;
 import joat.feed.dto.CreateCommentRequest;
@@ -12,6 +14,7 @@ import joat.feed.service.CommentService;
 import joat.feed.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,13 +25,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
  * 게시물 및 댓글 관련 API 컨트롤러.
  * 피드 조회, 포스트 CRUD, 좋아요, 댓글 CRUD를 하나의 컨트롤러에서 관리한다.
  */
+@Validated
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
@@ -56,7 +59,7 @@ public class PostController {
     @GetMapping
     public ApiResponse<CursorResponse<PostResponse>> feed(
         @AuthenticationPrincipal UUID userId,
-        @RequestParam(defaultValue = "20") int limit
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit
     ) {
         return ApiResponse.ok(postService.getFeed(userId, limit));
     }
@@ -73,7 +76,7 @@ public class PostController {
      */
     @GetMapping("/explore")
     public ApiResponse<CursorResponse<PostResponse>> explore(
-        @RequestParam(defaultValue = "20") int limit,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit,
         @RequestParam(required = false) String tag,
         @RequestParam(required = false) UUID cursor
     ) {
@@ -132,11 +135,18 @@ public class PostController {
     }
 
     /**
-     * [엔드포인트] GET /api/posts/{postId}/comments — 댓글 목록 조회 (시간 오름차순)
+     * [엔드포인트] GET /api/posts/{postId}/comments — 댓글 목록 조회 (커서 기반, 시간 오름차순)
+     *
+     * @param cursor 이전 페이지 마지막 댓글 UUID (없으면 첫 페이지)
+     * @param limit  페이지당 댓글 수 (기본 20, 최대 100)
      */
     @GetMapping("/{postId}/comments")
-    public ApiResponse<List<CommentResponse>> comments(@PathVariable UUID postId) {
-        return ApiResponse.ok(commentService.getComments(postId));
+    public ApiResponse<CursorResponse<CommentResponse>> comments(
+        @PathVariable UUID postId,
+        @RequestParam(required = false) UUID cursor,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit
+    ) {
+        return ApiResponse.ok(commentService.getComments(postId, cursor, limit));
     }
 
     /**
@@ -161,7 +171,7 @@ public class PostController {
     public ApiResponse<PostResponse> update(
         @AuthenticationPrincipal UUID userId,
         @PathVariable UUID postId,
-        @RequestBody UpdatePostRequest req
+        @Valid @RequestBody UpdatePostRequest req
     ) {
         return ApiResponse.ok(postService.updatePost(postId, userId, req));
     }

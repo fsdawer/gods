@@ -2,8 +2,8 @@ package joat.feed.service;
 
 import joat.feed.dto.CommentResponse;
 import joat.feed.dto.CreateCommentRequest;
+import joat.feed.dto.CursorResponse;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -13,12 +13,14 @@ import java.util.UUID;
 public interface CommentService {
 
     /**
-     * 포스트의 댓글 목록 조회 (대댓글 포함, 시간순).
+     * 포스트의 댓글 목록 조회 (커서 기반 페이지네이션, 시간 오름차순).
      *
      * @param postId 대상 포스트 UUID
-     * @return CommentResponse 목록 (parentId null=댓글, non-null=대댓글)
+     * @param cursor 이전 페이지 마지막 댓글 UUID (없으면 첫 페이지)
+     * @param limit  페이지당 댓글 수
+     * @return CursorResponse (data, nextCursor, hasNext)
      */
-    List<CommentResponse> getComments(UUID postId);
+    CursorResponse<CommentResponse> getComments(UUID postId, UUID cursor, int limit);
 
     /**
      * 댓글 또는 대댓글 작성.

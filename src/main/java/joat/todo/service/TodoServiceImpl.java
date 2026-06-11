@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,10 +49,13 @@ public class TodoServiceImpl implements TodoService {
             Todo.of(userId, createTodoRequest.getTitle(), createTodoRequest.isPublic(), createTodoRequest.getDate())
         );
         // 항목 리스트가 있으면 순서(orderIdx)를 배열 인덱스로 저장
+        // saveAll로 배치 INSERT (application.yaml의 hibernate.jdbc.batch_size 설정과 함께 동작)
         if (createTodoRequest.getItems() != null) {
+            List<TodoItem> items = new ArrayList<>();
             for (int i = 0; i < createTodoRequest.getItems().size(); i++) {
-                todoItemRepository.save(TodoItem.of(todo, createTodoRequest.getItems().get(i).getContent(), i));
+                items.add(TodoItem.of(todo, createTodoRequest.getItems().get(i).getContent(), i));
             }
+            todoItemRepository.saveAll(items);
         }
         return TodoResponse.from(todo);
     }

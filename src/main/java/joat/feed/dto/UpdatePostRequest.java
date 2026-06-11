@@ -1,5 +1,6 @@
 package joat.feed.dto;
 
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -15,7 +16,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdatePostRequest {
-    /** 수정할 본문 텍스트 (null이면 기존값 유지) */
+    /** 수정할 본문 텍스트 (null이면 기존값 유지, 빈 문자열 불허) */
+    @Size(min = 1, message = "content는 빈 문자열일 수 없습니다.")
     private String content;
     /** 수정할 이미지 URL 목록 (null이면 기존값 유지) */
     private List<String> imageUrls;

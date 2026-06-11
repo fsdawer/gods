@@ -1,5 +1,6 @@
 package joat.common.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import joat.common.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -27,7 +28,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * @Valid 유효성 검증 실패 예외 처리.
+     * @Valid 유효성 검증 실패 예외 처리 (@RequestBody 필드 검증).
      * 첫 번째 필드 오류의 필드명과 메시지를 조합하여 응답한다.
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -35,6 +36,20 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getFieldErrors().stream()
             .findFirst()
             .map(fe -> fe.getField() + ": " + fe.getDefaultMessage())
+            .orElse(ErrorCode.INVALID_INPUT.getMessage());
+        return ResponseEntity.badRequest()
+            .body(ApiResponse.fail(ErrorCode.INVALID_INPUT.name(), message));
+    }
+
+    /**
+     * @Min/@Max 등 @RequestParam·@PathVariable 제약 위반 처리 (@Validated 컨트롤러에서 발생).
+     * 첫 번째 위반 메시지를 추출하여 400 응답으로 반환한다.
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException e) {
+        String message = e.getConstraintViolations().stream()
+            .findFirst()
+            .map(cv -> cv.getPropertyPath() + ": " + cv.getMessage())
             .orElse(ErrorCode.INVALID_INPUT.getMessage());
         return ResponseEntity.badRequest()
             .body(ApiResponse.fail(ErrorCode.INVALID_INPUT.name(), message));
