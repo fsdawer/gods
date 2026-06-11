@@ -44,7 +44,7 @@ class TagServiceTest {
     }
 
     @Test
-    void Redis_비어있으면_DB에서_트렌딩_조회한다() {
+    void Redis_비어있으면_DB_조회_후_Redis_워밍업한다() {
         ZSetOperations<String, Object> zSetOps = mock(ZSetOperations.class);
         given(redisTemplate.opsForZSet()).willReturn(zSetOps);
         given(zSetOps.reverseRange("tags:trending", 0, 19)).willReturn(Set.of());
@@ -54,5 +54,10 @@ class TagServiceTest {
         List<TagResponse> result = tagService.getTrending();
 
         assertThat(result).hasSize(2);
+        // DB fallback 시 ZSet에 워밍업 호출 검증
+        org.mockito.Mockito.verify(zSetOps, org.mockito.Mockito.times(2))
+            .add(org.mockito.ArgumentMatchers.eq("tags:trending"),
+                 org.mockito.ArgumentMatchers.any(),
+                 org.mockito.ArgumentMatchers.anyDouble());
     }
 }

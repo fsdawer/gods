@@ -94,9 +94,11 @@ public class TagServiceImpl implements TagService {
      * Redis Sorted Set을 우선 조회하여 응답속도를 높인다.
      *
      * 1. Redis "tags:trending" ZSet에서 상위 20개 태그명 조회 (score 내림차순)
-     * 2. Redis 캐시가 비어있으면 (초기 상태 or TTL 만료) DB fallback:
+     * 2. Redis 캐시가 비어있으면 (초기 상태 or 컨테이너 재시작) DB fallback:
      *    → tags 테이블에서 post_count DESC 상위 20개 조회
-     * 3. 태그명 목록으로 DB 배치 조회 (WHERE name IN) → Redis 순서 유지하며 매핑
+     *    → 동시에 DB 결과를 ZSet에 워밍업 (score = post_count)
+     *    → 이후 실제 포스트 태그 score와 같은 ZSet에서 경쟁 가능
+     * 3. Redis hit 시 태그명 목록으로 DB 배치 조회 (WHERE name IN) → 순서 유지하며 매핑
      *    (Redis에 있지만 DB에 없는 경우 null 필터)
      *
      * @return TagResponse 목록 (최대 20개, score/postCount 내림차순)
@@ -117,9 +119,12 @@ public class TagServiceImpl implements TagService {
                 .toList();
         }
 
-        return tagRepository.findTop20ByOrderByPostCountDesc()
-            .stream()
-            .map(TagResponse::from)
-            .toList();
+        // DB fallback + Redis 워밍업 동시 수행
+        // → DB tags를 ZSet에 채워두면 이후 실제 포스트 태그와 같은 ZSet 안에서 score 경쟁 가능
+        List<Tag> dbTags = tagRepository.findTop20ByOrderByPostCountDesc();
+        dbTags.forEach(tag ->
+            redisTemplate.opsForZSet().add(TRENDING_KEY, tag.getName(), tag.getPostCount())
+        );
+        return dbTags.stream().map(TagResponse::from).toList();
     }
 }
