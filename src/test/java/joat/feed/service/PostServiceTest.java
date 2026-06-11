@@ -10,6 +10,7 @@ import joat.feed.repository.LikeRepository;
 import joat.feed.repository.PostRepository;
 import joat.tag.repository.PostTagRepository;
 import joat.tag.repository.TagRepository;
+import joat.tag.service.TagService;
 import joat.todo.entity.Todo;
 import joat.todo.entity.TodoItem;
 import joat.todo.service.TodoService;
@@ -60,6 +61,8 @@ class PostServiceTest {
     @Mock PostTagRepository postTagRepository;
     @Mock TagRepository tagRepository;
     @Mock TodoService todoService;
+    @Mock PostSaveHelper postSaveHelper;
+    @Mock TagService tagService;
     // Optional<PostEventProducer>는 Mockito가 직접 주입할 수 없어 null로 들어감
     // — tagNames 없는 createPost 테스트에서는 해당 분기 미진입이므로 문제없음
 
@@ -71,7 +74,7 @@ class PostServiceTest {
         UUID userId = UUID.randomUUID();
         CreatePostRequest req = new CreatePostRequest("오늘 갓생 살았다", null, null, null, null);
         User author = User.of("갓생러", OAuthProvider.kakao, "kakao-1");
-        given(postRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+        given(postSaveHelper.saveAndCommit(any())).willAnswer(inv -> inv.getArgument(0));
         given(userRepository.findById(userId)).willReturn(Optional.of(author));
 
         PostResponse res = postService.createPost(userId, req);
@@ -79,7 +82,7 @@ class PostServiceTest {
         assertThat(res.getType()).isEqualTo(PostType.free);
         assertThat(res.getAuthor()).isNotNull();
         assertThat(res.getAuthor().getNickname()).isEqualTo("갓생러");
-        then(postRepository).should().save(any(Post.class));
+        then(postSaveHelper).should().saveAndCommit(any(Post.class));
     }
 
     @Test
@@ -89,7 +92,7 @@ class PostServiceTest {
         UUID todoId = UUID.randomUUID();
         CreatePostRequest req = new CreatePostRequest("투두 완료!", null, null, todoId, null);
         User author = User.of("갓생러", OAuthProvider.kakao, "kakao-1");
-        given(postRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
+        given(postSaveHelper.saveAndCommit(any())).willAnswer(inv -> inv.getArgument(0));
         given(userRepository.findById(userId)).willReturn(Optional.of(author));
 
         PostResponse res = postService.createPost(userId, req);
