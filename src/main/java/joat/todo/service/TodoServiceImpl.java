@@ -11,6 +11,7 @@ import joat.todo.dto.UpdateTodoRequest;
 import joat.todo.repository.TodoItemRepository;
 import joat.todo.repository.TodoRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,30 +27,36 @@ import java.util.stream.Collectors;
 /**
  * TodoService 구현체.
  * 투두리스트 및 항목의 CRUD와 소유자 검증을 처리한다.
+ * 통계(getStats)는 Redis에 캐시하여 DB 풀스캔을 최소화한다.
+ * 투두 생성·수정·삭제·항목 체크 시 해당 유저의 캐시를 무효화한다.
  */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class TodoServiceImpl implements TodoService {
 
+    /** 통계 캐시 키 접두사: stats:user:{userId} */
+    private static final String STATS_KEY_PREFIX = "stats:user:";
+
     private final TodoRepository todoRepository;
     private final TodoItemRepository todoItemRepository;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     /**
      * [투두 생성 플로우]
      * 1. Todo 엔티티 생성 (userId, title, isPublic, date)
      * 2. todos 테이블에 저장
      * 3. req.items가 있으면 순서대로 todo_items 테이블에 저장 (orderIdx = 배열 인덱스)
-     * 4. TodoResponse로 변환하여 반환
+     * 4. 통계 캐시 무효화 (totalTodos 변경)
+     * 5. TodoResponse로 변환하여 반환
      *
      * 입력: userId (JWT에서 파싱), req (title, isPublic, date, items[])
-     * 호출: TodoRepository.save → TodoItemRepository.save (항목 수만큼)
+     * 호출: TodoRepository.save → TodoItemRepository.saveAll → evictStats
      * 반환: TodoResponse (id, title, isPublic, date, items[])
      */
     @Override
     @Transactional
     public TodoResponse createTodo(UUID userId, CreateTodoRequest createTodoRequest) {
-        // Todo 엔티티 저장
         Todo todo = todoRepository.save(
             Todo.of(userId, createTodoRequest.getTitle(), createTodoRequest.isPublic(), createTodoRequest.getDate())
         );
@@ -62,6 +69,7 @@ public class TodoServiceImpl implements TodoService {
             }
             todoItemRepository.saveAll(items);
         }
+        evictStats(userId); // totalTodos 증가 → 캐시 무효화
         return TodoResponse.from(todo);
     }
 
@@ -105,7 +113,8 @@ public class TodoServiceImpl implements TodoService {
      * 3. 제목·공개여부 업데이트 (null이면 기존값 유지)
      * 4. items가 요청에 포함된 경우: 기존 항목 전체 삭제 후 새 항목으로 교체
      *    (완료 상태는 초기화됨 — 항목 내용이 바뀌므로)
-     * 5. 업데이트된 TodoResponse 반환
+     * 5. 통계 캐시 무효화 (항목 교체로 completedTodos 변동 가능)
+     * 6. 업데이트된 TodoResponse 반환
      */
     @Override
     @Transactional
@@ -121,6 +130,7 @@ public class TodoServiceImpl implements TodoService {
             for (int i = 0; i < req.getItems().size(); i++) {
                 todoItemRepository.save(TodoItem.of(todo, req.getItems().get(i).getContent(), i));
             }
+            evictStats(userId); // 항목 교체 시 완료율·스트릭 변동 가능 → 캐시 무효화
         }
 
         return TodoResponse.from(findTodo(todoId)); // flush 후 재조회로 items 최신화
@@ -131,9 +141,10 @@ public class TodoServiceImpl implements TodoService {
      * 1. todoId로 Todo 엔티티 조회 (없으면 TODO_NOT_FOUND)
      * 2. 소유자 검증 — userId != userId이면 TODO_ACCESS_DENIED
      * 3. todos 테이블에서 삭제 (cascade로 todo_items도 함께 삭제)
+     * 4. 통계 캐시 무효화 (totalTodos 감소)
      *
      * 입력: todoId (삭제 대상), userId (JWT에서 파싱된 요청자 UUID)
-     * 호출: TodoRepository.findById → Todo.validateOwner → TodoRepository.delete
+     * 호출: TodoRepository.findById → Todo.validateOwner → TodoRepository.delete → evictStats
      * 반환: void
      */
     @Override
@@ -142,6 +153,7 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = findTodo(todoId);
         todo.validateOwner(userId); // 소유자가 아니면 TODO_ACCESS_DENIED 예외
         todoRepository.delete(todo);
+        evictStats(userId); // totalTodos 감소 → 캐시 무효화
     }
 
     /**
@@ -150,10 +162,10 @@ public class TodoServiceImpl implements TodoService {
      * 2. 소유자 검증 (TODO_ACCESS_DENIED)
      * 3. itemId로 TodoItem 조회 (없으면 TODO_ITEM_NOT_FOUND)
      * 4. isDone 값으로 is_done 필드 업데이트 (JPA dirty checking)
-     * 5. 업데이트된 전체 Todo(항목 포함)를 반환
+     * 5. 통계 캐시 무효화 (completedTodos·스트릭 변동 가능)
      *
      * 입력: todoId, itemId, userId, isDone (true=완료/false=미완료)
-     * 호출: TodoRepository.findById → Todo.validateOwner → TodoItemRepository.findById → TodoItem.toggleDone
+     * 호출: TodoRepository.findById → Todo.validateOwner → TodoItemRepository.findById → TodoItem.toggleDone → evictStats
      * 반환: 업데이트된 TodoResponse
      */
     @Override
@@ -162,11 +174,11 @@ public class TodoServiceImpl implements TodoService {
         Todo todo = findTodo(todoId);
         todo.validateOwner(userId);
 
-        // 해당 항목 조회 후 완료 상태 토글
         TodoItem todoItem = todoItemRepository.findById(itemId)
             .orElseThrow(() -> new BusinessException(ErrorCode.TODO_ITEM_NOT_FOUND));
         todoItem.toggleDone(isDone);
 
+        evictStats(userId); // 완료 상태 변경 → completedTodos·완료율·스트릭 변동 가능
         return TodoResponse.from(todo);
     }
 
@@ -186,28 +198,39 @@ public class TodoServiceImpl implements TodoService {
     }
 
     /**
-     * [통계 조회 플로우]
-     * 1. JOIN FETCH로 유저의 전체 투두+항목을 한 번에 로딩 (N+1 방지)
-     * 2. 항목이 1개 이상이고 모두 isDone=true인 투두를 "완료된 투두"로 집계
-     * 3. 날짜별로 그룹화하여 "완료된 날(date)" 집합 생성
-     *    — 해당 날짜의 모든 투두가 완료된 날만 포함 (일부만 완료된 날은 제외)
-     * 4. 완료된 날 집합을 역순으로 순회하며 currentStreak·longestStreak 계산
+     * [통계 조회 플로우 — Redis 캐시 우선]
+     * 1. Redis stats:user:{userId} 히트 → 즉시 반환
+     * 2. 캐시 미스 시 DB 풀스캔 후 계산:
+     *    a. JOIN FETCH로 유저의 전체 투두+항목을 한 번에 로딩 (N+1 방지)
+     *    b. 항목이 1개 이상이고 모두 isDone=true인 투두를 "완료된 투두"로 집계
+     *    c. 날짜별로 그룹화 → "그 날의 모든 투두가 완료된 날" 집합 생성
+     *    d. currentStreak·longestStreak 계산
+     *    e. 결과를 Redis에 저장 (TTL 없음 — 항상 evictStats로 무효화)
      *
      * 입력: userId (JWT에서 파싱된 요청자 UUID)
-     * 호출: TodoRepository.findAllWithItemsByUserId
      * 반환: TodoStatsResponse (totalTodos, completedTodos, completionRate, currentStreak, longestStreak)
      */
     @Override
     public TodoStatsResponse getStats(UUID userId) {
-        // JOIN FETCH로 items까지 한 번에 로딩 → N+1 없이 모든 투두 처리
+        String key = STATS_KEY_PREFIX + userId;
+
+        // Redis 히트: GenericJackson2JsonRedisSerializer가 @class 타입 정보 포함 직렬화 → 올바른 타입으로 역직렬화
+        Object cached = redisTemplate.opsForValue().get(key);
+        if (cached instanceof TodoStatsResponse stats) {
+            return stats;
+        }
+
+        // 캐시 미스: DB 풀스캔 후 계산
         List<Todo> todos = todoRepository.findAllWithItemsByUserId(userId);
 
         int totalTodos = todos.size();
         if (totalTodos == 0) {
-            return TodoStatsResponse.builder()
+            TodoStatsResponse empty = TodoStatsResponse.builder()
                 .totalTodos(0).completedTodos(0).completionRate(0.0)
                 .currentStreak(0).longestStreak(0)
                 .build();
+            redisTemplate.opsForValue().set(key, empty);
+            return empty;
         }
 
         // 항목이 1개 이상이고 모두 isDone=true인 투두 → "완료된 투두"
@@ -233,16 +256,16 @@ public class TodoServiceImpl implements TodoService {
             }
         }
 
-        int currentStreak = calcCurrentStreak(completedDays);
-        int longestStreak = calcLongestStreak(completedDays);
-
-        return TodoStatsResponse.builder()
+        TodoStatsResponse result = TodoStatsResponse.builder()
             .totalTodos(totalTodos)
             .completedTodos((int) completedTodos)
             .completionRate(completionRate)
-            .currentStreak(currentStreak)
-            .longestStreak(longestStreak)
+            .currentStreak(calcCurrentStreak(completedDays))
+            .longestStreak(calcLongestStreak(completedDays))
             .build();
+
+        redisTemplate.opsForValue().set(key, result); // 다음 요청부터 캐시 히트
+        return result;
     }
 
     /**
@@ -288,5 +311,10 @@ public class TodoServiceImpl implements TodoService {
             prev = day;
         }
         return longest;
+    }
+
+    /** stats:user:{userId} 캐시를 삭제한다. 투두 상태가 바뀌는 모든 쓰기 작업 후 호출. */
+    private void evictStats(UUID userId) {
+        redisTemplate.delete(STATS_KEY_PREFIX + userId);
     }
 }
