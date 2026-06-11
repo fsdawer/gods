@@ -40,9 +40,6 @@ dependencies {
     // AWS S3
     implementation 'software.amazon.awssdk:s3:2.25.0'
 
-    // Firebase Admin SDK (FCM 푸시 알림)
-    implementation 'com.google.firebase:firebase-admin:9.2.0'
-
     runtimeOnly 'org.postgresql:postgresql'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

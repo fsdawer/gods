@@ -29,12 +29,6 @@ spring:
 jwt:
   secret: local-dev-secret-key-must-be-at-least-256-bits-long-for-hs256
 
-# FCM 푸시 알림
-# firebase.enabled=true로 바꾸고 service-account-key 경로를 설정하면 실제 FCM 발송 활성화
-# Firebase Console > 프로젝트 설정 > 서비스 계정 > 새 비공개 키 생성 후 경로 입력
-firebase:
-  enabled: false
-  service-account-key: /path/to/firebase-service-account.json
 
 logging:
   level:
