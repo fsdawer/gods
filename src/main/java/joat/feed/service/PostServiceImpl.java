@@ -17,6 +17,7 @@ import joat.tag.entity.PostTag;
 import joat.tag.entity.Tag;
 import joat.tag.repository.PostTagRepository;
 import joat.tag.repository.TagRepository;
+import joat.tag.service.TagService;
 import joat.todo.entity.Todo;
 import joat.todo.entity.TodoItem;
 import joat.todo.service.TodoService;
@@ -25,6 +26,7 @@ import joat.user.entity.User;
 import joat.user.repository.FollowRepository;
 import joat.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Slice;
 import org.springframework.stereotype.Service;
@@ -41,8 +43,10 @@ import java.util.stream.Collectors;
 /**
  * PostService 구현체.
  * 포스트 CRUD, 좋아요, 커서 기반 피드 페이지네이션을 처리한다.
- * 해시태그 처리는 Kafka 이벤트로 비동기 위임한다 (TagEventConsumer가 수신).
+ * 해시태그 처리는 동기 우선(PostSaveHelper로 포스트 먼저 커밋 → TagService.processTags 직접 호출)이며,
+ * 실패 시 Kafka로 폴백하여 재처리한다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -56,21 +60,25 @@ public class PostServiceImpl implements PostService {
     private final TagRepository tagRepository;
     private final TodoService todoService;
     private final Optional<PostEventProducer> postEventProducer;
+    private final PostSaveHelper postSaveHelper;
+    private final TagService tagService;
 
     /**
-     * [포스트 생성 플로우]*
+     * [포스트 생성 플로우]
      * 1. imageUrls를 String[]로 변환 (null이면 빈 배열)
      * 2. teamId / todoId 유무로 분기:
      *    - teamId 있음 → Post.teamPost(type=free, teamId 연결) — 공개 피드 제외
      *    - todoId 있음 → Post.todoCert(type=todo_cert, todoId 연결)
      *    - 둘 다 없음 → Post.free(type=free)
-     * 3. posts 테이블에 저장
-     * 4. tagNames가 있으면 Kafka "post.created" 토픽으로 이벤트 발행
-     *    → TagEventConsumer가 비동기로 tags/post_tags 테이블 처리
+     * 3. PostSaveHelper(REQUIRES_NEW)로 포스트를 즉시 커밋
+     *    → post_tags FK 제약을 충족하기 위해 태그 처리 전 커밋 필수
+     * 4-A. 태그 있음: TagService.processTags 동기 호출 → 성공 시 markTagDone
+     *      실패 시 Kafka "post.created" 토픽 발행 → TagEventConsumer 재시도 → DLQ
+     * 4-B. 태그 없음: 즉시 markTagDone (PENDING 상태로 남지 않게)
      *
-     * 입력: userId (작성자), req (content, imageUrls, tagNames, todoId, teamId)
-     * 호출: PostRepository.save → PostEventProducer.publishPostCreated (태그 있을 때)
-     * 반환: PostResponse (id, userId, type, content, imageUrls, todoId, teamId, likeCount, commentCount, createdAt)
+     * @param userId 작성자 UUID
+     * @param req    content, imageUrls, tagNames, todoId, teamId
+     * @return PostResponse (author 포함, tags는 동기 성공 시 포함)
      */
     @Override
     @Transactional
@@ -90,18 +98,33 @@ public class PostServiceImpl implements PostService {
             post = Post.free(userId, req.getContent(), images);
         }
 
-        Post saved = postRepository.save(post);
+        // REQUIRES_NEW로 포스트를 즉시 커밋 → 이후 post_tags FK 제약 충족 보장
+        Post saved = postSaveHelper.saveAndCommit(post);
 
-        // 해시태그가 있으면 Kafka로 비동기 처리 위임
-        if (req.getTagNames() != null && !req.getTagNames().isEmpty()) {
-            postEventProducer.ifPresent(p ->
-                p.publishPostCreated(new PostCreatedEvent(saved.getId(), userId, req.getTagNames()))
-            );
+        List<String> tagNames = req.getTagNames();
+        List<String> savedTags = List.of();
+
+        if (tagNames != null && !tagNames.isEmpty()) {
+            try {
+                tagService.processTags(saved.getId(), tagNames);
+                markTagDone(saved.getId()); // 동기 성공 → DONE 마킹 (현재 tx에서 flush)
+                savedTags = tagNames;
+            } catch (Exception e) {
+                // 동기 실패 → Kafka 폴백 (TagEventConsumer가 재시도, 최종 실패 시 DLQ → FAILED 마킹)
+                log.warn("[createPost] sync tag processing failed for postId={}, falling back to Kafka: {}",
+                    saved.getId(), e.getMessage());
+                postEventProducer.ifPresent(p ->
+                    p.publishPostCreated(new PostCreatedEvent(saved.getId(), userId, tagNames))
+                );
+            }
+        } else {
+            // 태그 없는 포스트는 처리할 것이 없으므로 바로 DONE
+            markTagDone(saved.getId());
         }
 
         // 생성 응답에도 author를 포함해 프론트엔드가 별도 조회 없이 렌더링할 수 있게 함
         User author = userRepository.findById(userId).orElse(null);
-        return PostResponse.from(saved, author, List.of(), null);
+        return PostResponse.from(saved, author, savedTags, null);
     }
 
     /**
@@ -320,7 +343,7 @@ public class PostServiceImpl implements PostService {
      * 1. postId로 Post 조회 (없으면 POST_NOT_FOUND)
      * 2. 소유자 검증 (userId != post.userId → POST_FORBIDDEN)
      * 3. content, imageUrls 필드 업데이트 (null이면 기존값 유지)
-     * 4. tagNames가 있으면 Kafka로 태그 재처리 위임
+     * 4. tagNames가 있으면 동기 처리 시도 → 실패 시 Kafka 폴백
      *
      * 입력: postId, userId, req (content/imageUrls/tagNames)
      * 반환: 수정된 PostResponse
@@ -338,11 +361,19 @@ public class PostServiceImpl implements PostService {
             : null;
         post.update(req.getContent(), images);
 
-        // 태그 변경 요청이 있으면 Kafka로 재처리 위임
+        // 태그 변경 요청이 있으면 동기 처리 시도 → 실패 시 Kafka 폴백
+        // updatePost는 기존 포스트 수정이므로 posts 테이블에 이미 커밋된 상태 — postSaveHelper 불필요
         if (req.getTagNames() != null && !req.getTagNames().isEmpty()) {
-            postEventProducer.ifPresent(p ->
-                p.publishPostCreated(new PostCreatedEvent(post.getId(), userId, req.getTagNames()))
-            );
+            try {
+                tagService.processTags(post.getId(), req.getTagNames());
+                markTagDone(post.getId());
+            } catch (Exception e) {
+                log.warn("[updatePost] sync tag processing failed for postId={}, falling back to Kafka: {}",
+                    post.getId(), e.getMessage());
+                postEventProducer.ifPresent(p ->
+                    p.publishPostCreated(new PostCreatedEvent(post.getId(), userId, req.getTagNames()))
+                );
+            }
         }
 
         User author = userRepository.findById(userId).orElse(null);
