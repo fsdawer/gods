@@ -13,4 +13,7 @@ public final class KafkaTopics {
 
     /** post.created DLQ 토픽 — 3회 재시도 후 실패한 이벤트가 여기 도달, TagDlqConsumer가 FAILED 마킹 */
     public static final String POST_CREATED_DLQ = "post.created.dlq";
+
+    /** 알림 이벤트 토픽 — 좋아요·댓글·팔로우 발생 시 발행, NotificationConsumer가 FCM 푸시 발송 */
+    public static final String NOTIFICATION_CREATED = "notification.created";
 }

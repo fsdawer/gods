@@ -18,6 +18,7 @@ import joat.user.entity.OAuthProvider;
 import joat.user.entity.User;
 import joat.user.repository.FollowRepository;
 import joat.user.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -63,8 +64,13 @@ class PostServiceTest {
     @Mock TodoService todoService;
     @Mock PostSaveHelper postSaveHelper;
     @Mock TagService tagService;
-    // Optional<PostEventProducer>는 Mockito가 직접 주입할 수 없어 null로 들어감
-    // — tagNames 없는 createPost 테스트에서는 해당 분기 미진입이므로 문제없음
+    // Optional<PostEventProducer>, Optional<NotificationEventProducer>는 Mockito가 직접 주입 불가
+    // → @BeforeEach에서 ReflectionTestUtils로 Optional.empty() 세팅
+
+    @BeforeEach
+    void injectOptionals() {
+        org.springframework.test.util.ReflectionTestUtils.setField(postService, "notificationProducer", Optional.empty());
+    }
 
     // ── createPost ──────────────────────────────────────────────────
 

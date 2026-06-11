@@ -1,9 +1,11 @@
 package joat.user.controller;
 
+import jakarta.validation.Valid;
 import joat.common.response.ApiResponse;
 import joat.feed.dto.CursorResponse;
 import joat.feed.dto.PostResponse;
 import joat.feed.service.PostService;
+import joat.user.dto.FcmTokenRequest;
 import joat.user.dto.FollowListResponse;
 import joat.user.dto.UpdateProfileRequest;
 import joat.user.dto.UserProfileResponse;
@@ -178,5 +180,22 @@ public class UserController {
         @AuthenticationPrincipal UUID viewerId
     ) {
         return ApiResponse.ok(userService.getFollowing(userId, viewerId));
+    }
+
+    /**
+     * [엔드포인트] PATCH /api/users/me/fcm-token — FCM 디바이스 토큰 등록/갱신
+     * 앱 시작 시 RN에서 호출하여 최신 토큰을 서버에 저장한다.
+     * token을 null로 보내면 토큰을 제거하여 로그아웃 후 알림 수신을 중단한다.
+     *
+     * @param userId JWT에서 파싱된 요청자 UUID
+     * @param req    FCM 토큰 (null 허용)
+     */
+    @PatchMapping("/me/fcm-token")
+    public ApiResponse<Void> saveFcmToken(
+        @AuthenticationPrincipal UUID userId,
+        @Valid @RequestBody FcmTokenRequest req
+    ) {
+        userService.saveFcmToken(userId, req.getToken());
+        return ApiResponse.ok();
     }
 }
